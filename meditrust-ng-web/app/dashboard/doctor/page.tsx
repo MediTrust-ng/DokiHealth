@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import DoctorBell from "@/components/DoctorBell";
 import { subscribe } from "@/lib/eventBus";
 import { KeyboardDismissWrapper } from "@/components/KeyboardDismissWrapper";
+import DoctorConsultWatcher from "@/components/DoctorConsultWatcher";
 import DoctorRegistrationForms from "./profile/DoctorRegistrationForms";
 
 
@@ -33,6 +34,7 @@ export default function DoctorDashboard() {
   const [loadingBanks, setLoadingBanks] = useState(true);
   const [accountName, setAccountName] = useState<string | null>(null);
   const [totalPatients, setTotalPatients] = useState(0);
+  const [doctorUnassigned, setDoctorUnassigned] = useState(false);
   
 
   const [doctorId, setDoctorId] = useState<string | null>(null);
@@ -47,6 +49,7 @@ export default function DoctorDashboard() {
   const audioRef = useRef<HTMLAudioElement | null>(null); 
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const historyRef = useRef<HistoryItem[]>([]);
+  const [prevAssigned, setPrevAssigned] = useState(false);
 
 
   const updateHistory = (newItems: HistoryItem[]) => {
@@ -259,6 +262,27 @@ export default function DoctorDashboard() {
       else setGreeting("Good evening");
     };
     updateGreeting();
+
+    const fetchAvailability = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await supabase
+      .from("profile")
+      .select("is_available")
+      .eq("id", session.user.id)
+      .single();
+
+    if (error) {
+      console.error("Error fetching availability:", error.message);
+    } else {
+      setAvailability(data.is_available);
+    }
+  };
+
+  fetchAvailability();
     const interval = setInterval(updateGreeting, 60 * 1000);
     return () => clearInterval(interval);
   }, []);
@@ -349,40 +373,35 @@ export default function DoctorDashboard() {
           supabase.realtime.setAuth(session?.access_token ?? "");
     
           if (chRef.current) supabase.removeChannel(chRef.current);
-    
+           if (!session?.user?.id) return;
+
           const ch = supabase
             .channel("profile-realtime")
             .on(
               "postgres_changes",
-              { event: "*", schema: "public", table: "profile",filter: "is_assigned=eq.true" },
+              { event: "UPDATE", schema: "public", table: "profile",filter: `id=eq.${session.user.id}` },
+              
               async (payload) => {
                 console.log("Profile Change received!", payload);
-    
+                
                 if (payload.eventType !== "UPDATE") return;
                 const newRow = (payload as any).new;
+                
+
                 const oldRow = (payload as any).old;
+                if(!oldRow || !newRow) return;
+                //if(oldRow.is_assigned === newRow.is_assigned) return;
+
                 const isAssigned: boolean | undefined = newRow?.is_assigned;
                 const consultId: string | undefined = newRow?.consult_id;
                 const isConnecting: boolean | undefined = newRow?.is_connecting;
+                
 
-                setStatus(isAssigned);
-                if (oldRow.is_assigned !== newRow.is_assigned && newRow.is_assigned === true) {
-                  //console.log("Start timer");
-                  setIsAssigned(true);
+                if (newRow.id !== session.user.id) return;
 
-                  setShowToast(true);
-                if (!audioRef.current) {
-                  audioRef.current = new Audio("/notifications/consult-notif.mp3");
-                }
-                audioRef.current.play();
-
-                setPendingConsults([newRow]);
-                setTimeout(() => setShowToast(false), 2000);
-                }
-    
-                // BOTH SIDES: when status is "connecting" and room exists, join (once)
-                if (Boolean(isConnecting)) {
-                  console.log("Is Connecting is true, ");
+                   // BOTH SIDES: when status is "connecting" and room exists, join (once)
+                if (oldRow.is_connecting === false && newRow.is_connecting === true) {
+                  console.log("Is Connecting is true, CONNECTING ");
                   await joinConsult(consultId);
                   
                   const {error:err} = await supabase.from("profile")
@@ -396,6 +415,28 @@ export default function DoctorDashboard() {
                   if(err){
                     console.error("User failed to reset is_connecting");
                   }
+                }
+
+                if (oldRow.is_assigned === false && newRow.is_assigned === true) {
+                  
+                  // Doctor just got assigned
+                  setPrevAssigned(true);
+                  setIsAssigned(true);
+                  setShowToast(true);
+                  
+                  if (!audioRef.current) audioRef.current = new Audio("/notifications/consult-notif.mp3");
+                  audioRef.current.play();
+
+                setPendingConsults([newRow]);
+                setTimeout(() => setShowToast(false), 2000);
+                } else if (!newRow.is_assigned && prevAssigned) {
+                  // Assignment removed
+                  setPrevAssigned(false);
+                }
+                setStatus(isAssigned);
+                if (oldRow.is_assigned !== newRow.is_assigned && newRow.is_assigned === true) {
+                  //console.log("Start timer");
+                  setIsAssigned(true);
                 }
               }
             );
@@ -1016,6 +1057,7 @@ async function joinConsult(consultId: string) {
               <option value="Dermatology">👤 Dermatology</option>
               <option value="Endocrinology">🔬 Endocrinology</option>
               <option value="Gastroenterology">🫁 Gastroenterology</option>
+              <option value="Physiotherapy"> Physiotherapy</option>
               <option value="Neurology">🧠 Neurology</option>
               <option value="Orthopedics">🦴 Orthopedics</option>
               <option value="Psychiatry">🧘 Psychiatry</option>

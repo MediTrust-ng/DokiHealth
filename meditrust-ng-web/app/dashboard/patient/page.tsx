@@ -120,7 +120,7 @@ export default function PatientDashboard() {
 
   } catch (e: any) {
     console.error("Error creating consultation:", e.message);
-    alert("❌ Something went wrong creating your consultation.");
+    //alert("❌ Something went wrong creating your consultation.");
   } finally {
     setLoading(false);
   }
@@ -156,6 +156,7 @@ export default function PatientDashboard() {
         router.replace("/sign-in");
         return;
       }
+      const userId = session.user.id;
       
       // Fetch profile
       const res = await fetch("/api/profile", {
@@ -170,6 +171,7 @@ export default function PatientDashboard() {
      const { data: consults, error } = await supabase
   .from("consult")
   .select("*")
+  .eq("patient_id", userId)
   .order("requested_at", { ascending: false });
 
 

@@ -86,10 +86,11 @@ export function ConsultStatusWatcher() {
 
             if (newStatus === "failed") {
               
-              //toast.error(`Something went wrong while starting your consult. Please try again, or contact support if the issue continues.`);
+              //toast.error(`Something went wrong while starting your consult. 
+              // Please try again, or contact support if the issue continues.`);
               setTimeout(() => {
               setStatus(
-                "We couldn’t connect you with your assigned doctor. Please request a new consultation."
+                "All our doctors are with patients right now. Please hold on a little. we’ll connect you as soon as one is free."
               );
               setError(null);
               launchedPaymentsRef.current.clear();
@@ -99,7 +100,7 @@ export function ConsultStatusWatcher() {
               setTimeout(() => {
                 setStatus("done");
               }, 4000);
-            }, 3000);
+            }, 10);
               return;
             }
 
@@ -134,9 +135,9 @@ export function ConsultStatusWatcher() {
 
   return (
   <KeyboardDismissWrapper>
-    {status && status !== "done" ? (
+    {status && status !== "done" && status !== "ended" ? (
   <div className="fixed inset-0 flex items-center justify-center z-50">
-    <Card className="shadow-2xl rounded-xl border border-blue-200 bg-white w-80">
+    <Card className="shadow-2xl rounded-xl border border-blue-200 bg-white w-90">
       <CardContent className="flex flex-col items-center justify-center p-6">
         <h3 className="text-blue-500 font-semibold mb-3 text-base">
           Consult Status
